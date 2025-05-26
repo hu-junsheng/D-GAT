@@ -2,7 +2,7 @@ import argparse
 import os
 import torch
 import numpy as np
-from l2h_GCN_epoch_5_foldle2 import TrainingPreparation
+from trainer import TrainingPreparation
 
 
 def args_parse():
