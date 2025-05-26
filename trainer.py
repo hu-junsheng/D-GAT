@@ -19,7 +19,7 @@ class TrainingPreparation(object):
         self.total_valid_loss = {}
 
     def set_dataset(self, args):
-        module = __import__('dataset.datasetall', fromlist=[''])
+        module = __import__('data_process.datasets', fromlist=[''])
         data_dir = args.data_dir
         tot_subj = 93
         test_subj = (tot_subj // args.k_folds) + 1
