@@ -74,24 +74,20 @@ class TrainingPreparation(object):
             shuffle=False, num_workers=args.num_workers
         )
 
-        module = __import__('networks.GCN2cat', fromlist=[''])
+        module = __import__('net.dgat', fromlist=[''])
 
-        in_channels = 129  # 节点特征维度
-        hidden_channels = 64  # 隐藏层维度
-        out_channels = 129  # 输出特征维度
-        edge_dim = 7  # 边属性维度
-        model_g_B = module.GATNet(
+        model = module.GATNet(
             in_channels_pos=28,
             hidden_channels=args.hidden_channels,
             heads=args.heads,
             out_channels=args.out_channels
         ).cuda()
 
-        self.opt_g_B = torch.optim.Adam(model_g_B.parameters(), lr=args.g_lr, betas=(0.9, 0.999))
+        self.opt = torch.optim.Adam(model.parameters(), lr=args.g_lr, betas=(0.9, 0.999))
 
-        self.scheduler_g_B = ExponentialLR(self.opt_g_B, gamma=args.alpha)
+        self.scheduler = ExponentialLR(self.opt, gamma=args.alpha)
 
-        self.model_g_B = model_g_B.cuda()
+        self.model = model.cuda()
 
         self.lsd = LSD()
         self.valid_loss_lsd = np.inf
@@ -107,9 +103,9 @@ class TrainingPreparation(object):
     def save_checkpoint(self, args, epoch, checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
         checkpoint_state = {
-            "model": self.model_g_B.state_dict(),
-            "optimizer": self.opt_g_B.state_dict(),
-            "scheduler": self.scheduler_g_B.state_dict(),
+            "model": self.model.state_dict(),
+            "optimizer": self.opt.state_dict(),
+            "scheduler": self.scheduler.state_dict(),
             "epoch": epoch
         }
         checkpoint_path = os.path.join(checkpoint_dir, 'l2h_GAT_{}.pt'.format(epoch))
@@ -117,18 +113,10 @@ class TrainingPreparation(object):
         print("Saved checkpoint: {}".format(checkpoint_path))
 
     def train(self, args):
-        seed = args.seeds
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        self.model_g_B.train()
+        self.model.train()
         LOSS = []
         lsd = LSD()
-        # 定义损失函数
-        adversarial_loss = nn.BCELoss()
-        cycle_loss = nn.MSELoss()
-        lambda_cycle = 10  # 循环一致性损失的权重
-        root_dir = os.path.join('results/l2h_95/train', args.root_dirs)
+        root_dir = os.path.join('results/train', args.root_dirs)
         valid_error = np.inf
         best_loss = np.inf
         loss_best_lsd = np.inf
@@ -137,26 +125,11 @@ class TrainingPreparation(object):
         loss_best_mse_cy = np.inf
         loss_best_global = np.inf
         loss_best_global_cy = np.inf
-        print(f"单项L2H，训练集数量:{len(self.trainset) / 1730}")
         sum_lr = 1
         for epoch in range(self.start_epoch, args.total_epochs):
-            loss_epoch = 0
-            loss_lsd = 0
-            loss_ga = 0
-            loss_gb = 0
-            loss_da = 0
-            loss_db = 0
-            loss_mse = 0
             loss_g = 0
-            loss_lsd_cy = 0
-            loss_mse_cy = 0
-            loss_global = 0
-            loss_global_cy = 0
-
             self.epoch = epoch
             for i, ts in enumerate(tqdm(self.train_loader, desc=f"第{epoch}轮")):
-            # print(f"第{epoch}轮:train")
-            # for i, ts in enumerate(self.train_loader):
                 target, tar_pos, batch_data, an_mes, batch_datapos = ts
                 target = target.cuda(non_blocking=True).float()
                 tar_pos = tar_pos.cuda(non_blocking=True).float()
@@ -166,27 +139,27 @@ class TrainingPreparation(object):
                 an_mes = an_mes.cuda(non_blocking=True).float()
 
                 target_m, target_p = logmag_phase(target)
-                prediction = self.model_g_B(batch_data, batch_datapos)
+                prediction = self.model(batch_data, batch_datapos)
 
-                self.opt_g_B.zero_grad()
+                self.opt.zero_grad()
                 loss_G = F.mse_loss(prediction, target_m).pow(0.5)
                 loss_G.backward()
 
-                self.opt_g_B.step()
+                self.opt.step()
                 loss_g += loss_G
             if (loss_g / len(self.train_loader) < loss_best_mse):
                 loss_best_mse = loss_g / len(self.train_loader)
             print(f"\ntrain:{loss_g / len(self.train_loader)}")
-            if self.scheduler_g_B.get_last_lr()[0] > args.limit_lr:
-                self.scheduler_g_B.step()
+            if self.scheduler.get_last_lr()[0] > args.limit_lr:
+                self.scheduler.step()
             else:
                 sum_lr = sum_lr + 1
                 if sum_lr % 3 ==0:
-                    self.scheduler_g_B.step()
-            print(f"lr:{self.scheduler_g_B.get_last_lr()}")
+                    self.scheduler.step()
+            print(f"lr:{self.scheduler.get_last_lr()}")
             # valid mode
             self.test(args, 'valid')
-            self.model_g_B.train()
+            self.model.train()
         print("\n")
         print("==" * 30)
         print(f"train:best mse:{loss_best_mse}")
@@ -197,7 +170,7 @@ class TrainingPreparation(object):
         print("save final epoch")
 
     def test(self, args, mode='test'):
-        self.model_g_B.eval()
+        self.model.eval()
 
         # 定义损失函数
         adversarial_loss = nn.BCELoss()
@@ -205,22 +178,7 @@ class TrainingPreparation(object):
         lambda_cycle = 10  # 循环一致性损失的权重
         root_dir = root_dir = os.path.join('results/l2h_95/valid', args.root_dirs)
         os.makedirs(root_dir, exist_ok=True)
-        loss_epoch = 0
-        loss_lsd = 0
-        loss_ga = 0
-        loss_gb = 0
-        loss_da = 0
-        loss_db = 0
-        loss_mse = 0
         loss_g = 0
-        loss_sd = 0
-        loss_lsd_cy = 0
-        loss_mse_cy = 0
-        loss_best_global = 0
-        loss_best_global_cy = 0
-        loss_global = 0
-        loss_global_cy = 0
-
         loss_best_lsd = np.inf
         loss_best_lsd_cy = np.inf
         loss_best_mse = np.inf
@@ -237,7 +195,7 @@ class TrainingPreparation(object):
                 batch_datapos = batch_datapos.cuda(non_blocking=True)
                 an_mes = an_mes.cuda(non_blocking=True).float()
                 target_m, target_p = logmag_phase(target)
-                prediction = self.model_g_B(batch_data, batch_datapos)
+                prediction = self.model(batch_data, batch_datapos)
                 loss_G = F.mse_loss(prediction, target_m).pow(0.5)
                 loss_SD = (prediction - target_m).abs().float().squeeze(1).mean()
 
@@ -248,7 +206,7 @@ class TrainingPreparation(object):
                 if (loss_g / len(loader) < self.valid_loss_mse):
                     self.valid_loss_mse = loss_g / len(loader)
                     self.valid_loss_sd = loss_sd / len(loader)
-                    self.model_g_B.train()
+                    self.model.train()
                     # self.save_checkpoint(args,self.epoch,root_dir)
                     print("best Loss,save model as pt")
 
