@@ -7,9 +7,6 @@ from trainer import TrainingPreparation
 
 def args_parse():
     parser = argparse.ArgumentParser()
-    # ------------------------------
-    # General
-    # ------------------------------
     parser.add_argument('--train', action="store_true")
     parser.add_argument('--test', action="store_true")
     parser.add_argument('--resume', action="store_true")
@@ -27,17 +24,8 @@ def args_parse():
     parser.add_argument('--test_fold', type=int, default=5, help='k for test')
     parser.add_argument('--model', type=str, default='hyperfilm')
     parser.add_argument('--exp_name', type=str, default=None)
-
     parser.add_argument('--gpu_id', type=int, default=5,help='ID of the GPU to use (default: 0)')
     parser.add_argument('--num_workers', type=int, default=8)
-    # ------------------------------
-    # Network
-    # ------------------------------
-    parser.add_argument('--in_ch', type=int, default=16)
-    parser.add_argument('--out_ch', type=int, default=1)
-    # ------------------------------
-    # Data
-    # ------------------------------
     parser.add_argument('--p_range', default=0.2, type=float, help='patch range')
     parser.add_argument('--rescale', default=50, type=float, help='rescale factor for input')
     parser.add_argument('--seed', default=0, type=int, help='random seed')
